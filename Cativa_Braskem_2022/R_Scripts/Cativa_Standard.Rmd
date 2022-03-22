@@ -1,0 +1,328 @@
+Carregando Pacotes e Definindo Variáveis Globais
+```{r}
+#Pacotes
+library(package = tidyverse)
+library(package = data.table)
+library(package = glue)
+library(package = ggthemes)
+library(package = scales)
+
+#Variáveis Globais, valores em milhões.
+Media <- 15
+Desvio <- 1.874
+Minimo <- 10
+
+#Variáveis Globais
+Anos_Simulacao <- 10000
+N_Simu <- Anos_Simulacao * 12 #Simulações mensais
+
+Data_Inicial <- "2023/01/01"
+Data_Final <- as.Date(x = Data_Inicial) + Anos_Simulacao * 365
+```
+
+Gerando a amostra
+```{r}
+#Amostra Com o Dobro de Valores Necessários
+Simulacao <- data.frame("Valores_Simulados" = rnorm(n = N_Simu * 2, mean = Media, sd = Desvio))
+```
+
+Criando o Data.Frame Que Será Preenchido Com Os Elementos Da Simulacao.
+```{r}
+Data_Inicial <- "2023/01/01"
+Data_Final <- as.Date(x = Data_Inicial) + Anos_Simulacao * 365 #Adicionando os dias decorridos para ter a Data_Final.
+
+
+Tabela <- data.frame("Data" = seq(from = as.Date(x = Data_Inicial), to = as.Date(x = Data_Final), by = "months"),
+                     Valor_Sinistro = 0)
+
+Tabela$Valor_Sinistro <- sample(x = Simulacao$Valores_Simulados, size = nrow(x = Tabela), replace = TRUE)
+#Se for menor do que o Mínimo estabelecido, trago o valor para a média.
+Tabela$Valor_Sinistro <- ifelse(test = Tabela$Valor_Sinistro >= Minimo, yes = Tabela$Valor_Sinistro, no = Media)
+Tabela$Ano <- year(x = Tabela$Data)
+
+#Retirando o último ano pois algumas vezes não era um ano completo e distorcia a visualização e interpretação dos valores.
+Tabela <- subset(x = Tabela, Ano != max(... = Tabela$Ano))
+```
+
+Criando Alguns Gráficos Para Visualizar Os Resultados Da Simulação
+```{r, fig.width = 15, fig.height = 5}
+ggplot(data = Tabela, aes(x = Valor_Sinistro)) + geom_histogram(bins = 20, colour = "white", fill = "black") + theme_calc(base_size = 16) +
+  scale_x_continuous(expand = c(0, 0), breaks = c(Minimo, Media - Desvio, Media, Media + Desvio, Media + 2*Desvio)) +
+  labs(x = "Sinistro Mensal(R$ Milhões)", y = "", title = "Histograma Dos Valores Simulados", 
+       subtitle = glue("Entre {Tabela$Data[1]} e  {Tabela$Data[nrow(x = Tabela)]}")) + 
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5))
+```
+
+Criando Um Data.Frame Para Visualizar Algumas Estatísticas.
+```{r}
+Tabela_Estatisticas <- data.frame("Estatisticas" = 
+                                  c(round(x = sum(... = Tabela$Valor_Sinistro <= Media)/nrow(x = Tabela) * 100, digits = 2),
+                                  round(x = sum(... = Tabela$Valor_Sinistro > Media)/nrow(x = Tabela) * 100, digits = 2),
+                                  round(x = sum(... = Tabela$Valor_Sinistro >= Media - Desvio & Tabela$Valor_Sinistro <= Media + Desvio)/
+                                          nrow(x = Tabela) * 100, digits = 2),
+                                  round(x = sum(... = Tabela$Valor_Sinistro >= Media - 2* Desvio & Tabela$Valor_Sinistro <= Media + 2 *Desvio)/
+                                          nrow(x = Tabela) * 100, digits = 2),
+                                  round(x = (median(x = Tabela$Valor_Sinistro)/mean(x = Tabela$Valor_Sinistro) - 1) * 100),
+                                  quantile(x = Tabela$Valor_Sinistro, 0.9),
+                                  quantile(x = Tabela$Valor_Sinistro, 0.95),
+                                  quantile(x = Tabela$Valor_Sinistro, 0.99)))
+
+rownames(x = Tabela_Estatisticas) <- c("% X <= Media", "% > Media", "% 1Desvio", "% 2Desvio", "%Deslo Median/Mean", "Exce_10", "Exce_5", "Exce_1")
+```
+
+Agrupando Os Valores Anualmente Para Verificar o Comportamento Anual Dos Montantes. Ademais, Criando Alguns Gráficos Para Visualizar Os Resultados Da
+Simulação, Nesse Caso O Histograma Dos Montantes Anuais
+```{r, fig.width = 15, fig.height = 5}
+Tabela_Agrupada <- Tabela%>%group_by(Ano)%>%summarise("Montante" = sum(... = Valor_Sinistro))
+
+ggplot(data = Tabela_Agrupada, aes(x = Montante)) + geom_histogram(bins = 20, colour = "white", fill = "black") + theme_calc(base_size = 16) +
+  scale_x_continuous(expand = c(0, 0), breaks = as.numeric(x = quantile(x = Tabela_Agrupada$Montante, c(0.01 ,0.1, 0.3, 0.5, 0.7, 0.9, 0.99)))) +
+  labs(x = "Sinistro Anual(R$ Milhões)", y = "", title = "Histograma Dos Valores Consolidados Anualmente", 
+       subtitle = glue("Entre {Tabela_Agrupada$Ano[1]} e  {Tabela_Agrupada$Ano[nrow(x = Tabela_Agrupada)]}")) + 
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5))
+```
+
+Criando Um Data.Frame Para Visualizar Algumas Estatísticas Sobre Os Sinistros Anuais.
+```{r}
+Tabela_Estatisticas_Agru <- data.frame("Estatisticas" = 
+  c(mean(x = Tabela_Agrupada$Montante),
+    sd(x = Tabela_Agrupada$Montante),
+    quantile(x = Tabela_Agrupada$Montante, 0.9),
+    quantile(x = Tabela_Agrupada$Montante, 0.95),
+    quantile(x = Tabela_Agrupada$Montante, 0.99)))
+
+rownames(x = Tabela_Estatisticas_Agru) <- c("Media", "Desvio", "Exce_10", "Exce_5", "Exce_1")
+```
+
+Construindo Uma Tabela Com A Probabilidade de Fracasso, isto é, Observar Um Mês Maior Que O Valor Determinado para certos níveis de Excedência. 
+```{r}
+Tabela_Binomial <- data.frame("Numero_Eventos" = seq(from = 1, to = 12, by = 1), "Exce10" = 0, "Exce5" = 0, "Exce1" = 0)
+Tabela_Binomial$Exce10 <- round(x = dbinom(x = Tabela_Binomial$Numero_Eventos, size = 12, prob = 0.1) * 100, digits = 8)
+Tabela_Binomial$Exce5 <- round(x = dbinom(x = Tabela_Binomial$Numero_Eventos, size = 12, prob = 0.05) * 100, digits = 8)
+Tabela_Binomial$Exce1 <- round(x = dbinom(x = Tabela_Binomial$Numero_Eventos, size = 12, prob = 0.01) * 100, digits = 8)
+```
+
+Criando o Data.Frame Que Armazena O Valor De Algumas Premissas 
+```{r}
+Premissas <- data.frame("Beneficiarios" = 21000,
+                        "Stop_Loss" = as.numeric(x = quantile(x = Tabela_Agrupada$Montante, 0.50)),
+                        "Remuneracao_Capital_Anual" = 0.03,
+                        "Carregamento_Seguranca" = 0.02,
+                        "Profit_DA" = 0.1)   
+
+Premissas$Remuneracao_Capital_Mensal <- (1 + 0.03) ^ (1/12) - 1
+```
+
+Verificando A Distribuição Das Excedências Anuais e Uma Tabela Com Estatisticas Dos Excessos.
+```{r, fig.width = 15, fig.height = 5}
+Tabela_Agrupada$Stop_Loss <- Premissas$Stop_Loss
+
+Tabela_Agrupada$Excesso <- ifelse(test = Tabela_Agrupada$Montante > Tabela_Agrupada$Stop_Loss, 
+                                  yes = Tabela_Agrupada$Stop_Loss - Tabela_Agrupada$Montante, 
+                                  no = 0)
+
+Tabela_Agrupada <-  round(x = Tabela_Agrupada, digits = 2)
+Temporario <- subset(x = Tabela_Agrupada, Excesso != 0) 
+Temporario$Excesso <- Temporario$Excesso * -1
+
+#Tabela Com as Estatisticas
+Tabela_Estatisticas_Exce <- data.frame("Estatisticas" = 
+  c(mean(x = Temporario$Excesso),
+    sd(x = Temporario$Excesso),
+    quantile(x = Temporario$Excesso, 0.5),
+    quantile(x = Temporario$Excesso, 0.9),
+    quantile(x = Temporario$Excesso, 0.95),
+    quantile(x = Temporario$Excesso, 0.99)))
+
+rownames(x = Tabela_Estatisticas_Exce) <- c("Media", "Desvio", "Exce_50", "Exce_10", "Exce_5", "Exce_1")
+
+ggplot(data = Temporario, aes(x = Excesso)) + 
+  geom_histogram(bins = 20, colour = "white", fill = "black") + theme_calc(base_size = 16) +
+  scale_x_continuous(expand = c(0, 0), breaks = round(x = as.numeric(x = quantile(x = Temporario$Excesso, c(0.00001, 0.5, 0.999))), digits = 2)) +
+  labs(x = "Excesso Anual(R$ Milhões)", y = "", title = "Histograma Dos Excessos Anuais", 
+       subtitle = glue("Entre {Temporario$Ano[1]} e  {Temporario$Ano[nrow(x = Temporario)]}")) + 
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5))
+```
+
+Verificando a distribuição do Prêmio Necessário Para Cada Ano
+```{r, fig.width = 15, fig.height = 5}
+Temporario$Premio_Puro <- Temporario$Excesso * 1000000 / Premissas$Beneficiarios / 12
+Temporario$Premio_Carregamento <- Temporario$Premio_Puro * (1 + Premissas$Carregamento_Seguranca)
+Temporario$Premio_Total <- Temporario$Premio_Carregamento * (1 + Premissas$Profit_DA)
+
+#Colocando O Prémio Médio Como Premissa
+Premissas$Premio <- mean(x = Temporario$Premio_Total)
+
+
+ggplot(data = Temporario, aes(x = Premio_Puro)) + geom_histogram(bins = 20, colour = "white", fill = "black") + theme_calc(base_size = 16) +
+  scale_x_continuous(expand = c(0, 0), breaks = round(x = as.numeric(x = quantile(x = Temporario$Premio_Puro, c(0.00001, 0.5, 0.999))), digits = 2)) +
+  labs(x = "Prêmio Puro (R$)", y = "", title = "Histograma Dos Premios Puros Anuais - Necessárias", 
+       subtitle = glue("Entre {Temporario$Ano[1]} e  {Temporario$Ano[nrow(x = Temporario)]}")) + 
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5))
+```
+
+Criando Um Data.Frame Com Os Valores Mensais, Acumulados, Excessos, Fluxo_Caixa
+```{r}
+Tabela_Mensal_Horizon <- data.frame("Jan" = rep(x = 0, times = nrow(x = Tabela_Agrupada)),
+                                    "Fev" = 0,
+                                    "Mar" = 0,
+                                    "Abr" = 0,
+                                    "Mai" = 0,
+                                    "Jun" = 0,
+                                    "Jul" = 0, 
+                                    "Ago" = 0,
+                                    "Set" = 0,
+                                    "Out" = 0,
+                                    "Nov" = 0,
+                                    "Dez" = 0)
+
+rownames(x = Tabela_Mensal_Horizon) <- Tabela_Agrupada$Ano
+Tabela_Acum_Horizon <- Tabela_Mensal_Horizon
+Tabela_Excesso_Horizon <- Tabela_Mensal_Horizon
+Tabela_Fluxo_Caixa <- Tabela_Mensal_Horizon
+Tabela_Fluxo_Acumu <- Tabela_Mensal_Horizon
+
+
+#Valores Simulados Mensalmente
+Contador <- 1
+Linha <- 1
+
+for(i in 1:nrow(x = Tabela)){
+  
+  if(Contador <= 12){
+    Tabela_Mensal_Horizon[Linha, Contador] <- Tabela$Valor_Sinistro[i]
+  }else{
+    Linha <- Linha + 1
+    Contador <- 1
+    Tabela_Mensal_Horizon[Linha, Contador] <- Tabela$Valor_Sinistro[i]
+  }
+  Contador <- Contador + 1
+}
+
+#Tabela Sinistro Acumulada Mensalmente
+Tabela_Acum_Horizon[,1] <- Tabela_Mensal_Horizon[,1]
+
+for(i in 1:nrow(x = Tabela_Mensal_Horizon)){
+  for(j in 2:ncol(x = Tabela_Mensal_Horizon)){
+    Tabela_Acum_Horizon[i, j] <- Tabela_Mensal_Horizon[i, j] + Tabela_Acum_Horizon[i, j -1]
+  }
+}
+
+#Tabela Excedência Acumulada Mensalmente
+for(i in 1:nrow(x = Tabela_Acum_Horizon)){
+  for(j in 1:ncol(x = Tabela_Acum_Horizon)){
+    if(Tabela_Acum_Horizon[i,j] > Premissas$Stop_Loss){
+      #Preciso retirar o valor da excedência da coluna anterior pois como é acumulado, se não fizesse isso ia contar duas vezes a mesma excedência.
+      Tabela_Excesso_Horizon[i, j] <- round(x = Tabela_Acum_Horizon[i, j] - Premissas$Stop_Loss - Tabela_Excesso_Horizon[i, j - 1], digits = 2)
+    }
+  }
+}
+
+#Tabela Fluxo Caixa Da Cativa
+Tabela_Fluxo_Caixa[,] <- Premissas$Premio * Premissas$Beneficiarios * (1 - Premissas$Profit_DA)
+Tabela_Fluxo_Caixa <- Tabela_Fluxo_Caixa - (Tabela_Excesso_Horizon * 1000000)
+
+#Tabela Fluxo Caixa Acumulado Cativa, Nesse Caso Estamos Interessados Em Verificar Os Resultados De Cada Simulação Em Cada Ano. Portanto, Não Acumulamos O Saldo Do Ano Anterior Para O Próximo.
+Tabela_Fluxo_Acumu[,1] <- Tabela_Fluxo_Caixa[,1]
+
+for(i in 1:nrow(x = Tabela_Fluxo_Caixa)){
+  for(j in 2:ncol(x = Tabela_Fluxo_Caixa)){
+    Tabela_Fluxo_Acumu[i, j] <- Tabela_Fluxo_Caixa[i, j] + Tabela_Fluxo_Acumu[i, j -1] + 
+      (Premissas$Remuneracao_Capital_Mensal * Tabela_Fluxo_Acumu[i, j -1])
+  }
+}
+```
+
+Construindo Um Gráfico Para Verificar O Comportamento Do Resultado Anual E Uma Tabela Com As Estatisticas
+```{r, fig.width = 15, fig.height = 5}
+ggplot(data = Tabela_Fluxo_Acumu, aes(x = Dez)) + geom_histogram(bins = 20, colour = "white", fill = "black") + theme_calc(base_size = 16) +
+  scale_x_continuous(expand = c(0, 0), breaks = as.numeric(x = quantile(x = Tabela_Fluxo_Acumu$Dez, c(0.001, 0.05, 0.2, 0.4, 0.7)))) +
+  labs(x = "Resultados Anuais (R$)", y = "", title = "Histograma Dos Resultados Anuais Simulados", 
+       subtitle = glue("Entre {Tabela$Data[1]} e  {Tabela$Data[nrow(x = Tabela)]}")) + 
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5))
+
+#Tabela Com as Estatisticas
+Tabela_Estatisticas_Resultado <- data.frame("Estatisticas" = 
+  c(mean(x = Tabela_Fluxo_Acumu$Dez),
+    quantile(x = Tabela_Fluxo_Acumu$Dez, 0.01),
+    quantile(x = Tabela_Fluxo_Acumu$Dez, 0.1),
+    quantile(x = Tabela_Fluxo_Acumu$Dez, 0.3),
+    quantile(x = Tabela_Fluxo_Acumu$Dez, 0.5),
+    quantile(x = Tabela_Fluxo_Acumu$Dez, 0.7),
+    quantile(x = Tabela_Fluxo_Acumu$Dez, 0.9),
+    quantile(x = Tabela_Fluxo_Acumu$Dez, 0.95),
+    quantile(x = Tabela_Fluxo_Acumu$Dez, 0.99),
+    round(x = sum(... = Tabela_Fluxo_Acumu$Dez < 0)/nrow(x = Tabela_Fluxo_Acumu) * 100, digits = 2)))
+
+rownames(x = Tabela_Estatisticas_Resultado) <- c("Media", "Exce_99", "Exce_90", "Exce_70", "Exce_50", "Exce_30", "Exce_10", "Exce_5", "Exce_1", 
+                                                 "P_Cash_Call")
+```
+
+Construindo A Curva De Excedência Para Os Resultados Anuais
+```{r, fig.width = 15, fig.height = 5}
+Excedencias_Resultado <- data.frame("Quantil" = seq(0.01, to = 1, by = 0.01), "Valor" = 0, "Excedencia" = 0)
+Excedencias_Resultado$Valor <- quantile(x = Tabela_Fluxo_Acumu$Dez, Excedencias_Resultado$Quantil)
+Excedencias_Resultado$Excedencia <- round(x = (1 - Excedencias_Resultado$Quantil) * 100, digits = 2)
+
+ggplot(data = Excedencias_Resultado, aes(x = Valor, y = Excedencia)) + geom_line(colour = "yellow", size = 2) + geom_point() +
+  scale_x_continuous(labels = comma) + theme_clean(base_size = 16) + 
+  labs(x = "Resultado Anual (R$)", y  = "Excedência", title = "Resultados Anuais - Curva Excedência",
+                                                                          subtitle = glue("Entre {Tabela$Data[1]} e  {Tabela$Data[nrow(x = Tabela)]}")) +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5))
+```
+
+Construindo A Curva De Excedência Para Os Resultados Mensais e Plotando os Reultados
+```{r, fig.width = 15, fig.height = 5}
+Tabela_Teste <- data.frame("Mes" = rep(x =  seq(from = 1, to = 12, by = 1), times = nrow(x = Tabela_Excesso_Horizon)),
+                           "Valor" = 0,
+                           "Ano" = 0)
+
+Contador <- 1
+
+for(i in 1:nrow(x = Tabela_Excesso_Horizon)){
+  Tabela_Teste$Valor[Contador:(Contador + 11)] <- Tabela_Excesso_Horizon[i,]
+  Tabela_Teste$Ano[Contador:(Contador + 11)] <- rep(x = rownames(x = Tabela_Excesso_Horizon)[i], times = 12)
+  Contador <- Contador + 12
+}
+
+#Por Algum Fator Que Ainda Não Compreendi, Os Valores Estavam Como Lista
+Tabela_Teste$Valor <- unlist(x = Tabela_Teste$Valor)
+
+ggplot(data = Tabela_Teste, aes(x = Mes, y = Valor)) + geom_line(aes(colour = Ano), size = 1.2) + theme_clean(base_size = 16) +
+  scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1), expand = c(0, 0)) +
+  labs(y = "Excedência (R$ Milhões)", x = "Mês", title = "Excedências Mensais", 
+       subtitle = glue("Entre {Tabela$Data[1]} e  {Tabela$Data[nrow(x = Tabela)]}")) +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5))
+```
+
+Construindo A Curva De Excedência Para O Fluxo_Acumulado
+```{r, fig.width = 15, fig.height = 5}
+#Tabela_Grafico_Excedencia <- melt(data = Tabela_Excesso_Horizon, variable.name = "Mes")
+Tabela_Teste <- data.frame("Mes" = rep(x =  seq(from = 1, to = 12, by = 1), times = nrow(x = Tabela_Excesso_Horizon)),
+                           "Valor" = 0,
+                           "Ano" = 0)
+
+Contador <- 1
+
+for(i in 1:nrow(x = Tabela_Excesso_Horizon)){
+  Tabela_Teste$Valor[Contador:(Contador + 11)] <- Tabela_Fluxo_Acumu[i,]
+  Tabela_Teste$Ano[Contador:(Contador + 11)] <- rep(x = rownames(x = Tabela_Fluxo_Acumu)[i], times = 12)
+  Contador <- Contador + 12
+}
+
+#Por Algum Fator Que Ainda Não Compreendi, Os Valores Estavam Como Lista
+Tabela_Teste$Valor <- unlist(x = Tabela_Teste$Valor)
+
+ggplot(data = Tabela_Teste, aes(x = Mes, y = Valor)) + geom_line(aes(colour = Ano), size = 1.2) + theme_clean(base_size = 16) +
+  scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1), expand = c(0, 0)) + scale_y_continuous(labels = comma) +
+  labs(y = "Resultado (R$)", x = "Mês", title = "Resultados Anuais", 
+       subtitle = glue("Entre {Tabela$Data[1]} e  {Tabela$Data[nrow(x = Tabela)]}")) +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5))
+```
+
+
+
+```{r}
+
+```
+
