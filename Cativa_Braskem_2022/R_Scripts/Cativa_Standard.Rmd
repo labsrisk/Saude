@@ -273,22 +273,22 @@ ggplot(data = Excedencias_Resultado, aes(x = Valor, y = Excedencia)) + geom_line
 
 Construindo A Curva De Excedência Para Os Resultados Mensais e Plotando os Reultados
 ```{r, fig.width = 15, fig.height = 5}
-Tabela_Teste <- data.frame("Mes" = rep(x =  seq(from = 1, to = 12, by = 1), times = nrow(x = Tabela_Excesso_Horizon)),
+Temporario <- data.frame("Mes" = rep(x =  seq(from = 1, to = 12, by = 1), times = nrow(x = Tabela_Excesso_Horizon)),
                            "Valor" = 0,
                            "Ano" = 0)
 
 Contador <- 1
 
 for(i in 1:nrow(x = Tabela_Excesso_Horizon)){
-  Tabela_Teste$Valor[Contador:(Contador + 11)] <- Tabela_Excesso_Horizon[i,]
-  Tabela_Teste$Ano[Contador:(Contador + 11)] <- rep(x = rownames(x = Tabela_Excesso_Horizon)[i], times = 12)
+  Temporario$Valor[Contador:(Contador + 11)] <- Tabela_Excesso_Horizon[i,]
+  Temporario$Ano[Contador:(Contador + 11)] <- rep(x = rownames(x = Tabela_Excesso_Horizon)[i], times = 12)
   Contador <- Contador + 12
 }
 
 #Por Algum Fator Que Ainda Não Compreendi, Os Valores Estavam Como Lista
-Tabela_Teste$Valor <- unlist(x = Tabela_Teste$Valor)
+Temporario$Valor <- unlist(x = Temporario$Valor)
 
-ggplot(data = Tabela_Teste, aes(x = Mes, y = Valor)) + geom_line(aes(colour = Ano), size = 1.2) + theme_clean(base_size = 16) +
+ggplot(data = Temporario, aes(x = Mes, y = Valor)) + geom_line(aes(colour = Ano), size = 1.2) + theme_clean(base_size = 16) +
   scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1), expand = c(0, 0)) +
   labs(y = "Excedência (R$ Milhões)", x = "Mês", title = "Excedências Mensais", 
        subtitle = glue("Entre {Tabela$Data[1]} e  {Tabela$Data[nrow(x = Tabela)]}")) +
@@ -298,31 +298,63 @@ ggplot(data = Tabela_Teste, aes(x = Mes, y = Valor)) + geom_line(aes(colour = An
 Construindo A Curva De Excedência Para O Fluxo_Acumulado
 ```{r, fig.width = 15, fig.height = 5}
 #Tabela_Grafico_Excedencia <- melt(data = Tabela_Excesso_Horizon, variable.name = "Mes")
-Tabela_Teste <- data.frame("Mes" = rep(x =  seq(from = 1, to = 12, by = 1), times = nrow(x = Tabela_Excesso_Horizon)),
+Temporario <- data.frame("Mes" = rep(x =  seq(from = 1, to = 12, by = 1), times = nrow(x = Tabela_Excesso_Horizon)),
                            "Valor" = 0,
                            "Ano" = 0)
 
 Contador <- 1
 
 for(i in 1:nrow(x = Tabela_Excesso_Horizon)){
-  Tabela_Teste$Valor[Contador:(Contador + 11)] <- Tabela_Fluxo_Acumu[i,]
-  Tabela_Teste$Ano[Contador:(Contador + 11)] <- rep(x = rownames(x = Tabela_Fluxo_Acumu)[i], times = 12)
+  Temporario$Valor[Contador:(Contador + 11)] <- Tabela_Fluxo_Acumu[i,]
+  Temporario$Ano[Contador:(Contador + 11)] <- rep(x = rownames(x = Tabela_Fluxo_Acumu)[i], times = 12)
   Contador <- Contador + 12
 }
 
 #Por Algum Fator Que Ainda Não Compreendi, Os Valores Estavam Como Lista
-Tabela_Teste$Valor <- unlist(x = Tabela_Teste$Valor)
+Temporario$Valor <- unlist(x = Temporario$Valor)
 
-ggplot(data = Tabela_Teste, aes(x = Mes, y = Valor)) + geom_line(aes(colour = Ano), size = 1.2) + theme_clean(base_size = 16) +
+ggplot(data = Temporario, aes(x = Mes, y = Valor)) + geom_line(aes(colour = Ano), size = 1.2) + theme_clean(base_size = 16) +
   scale_x_continuous(breaks = seq(from = 1, to = 12, by = 1), expand = c(0, 0)) + scale_y_continuous(labels = comma) +
   labs(y = "Resultado (R$)", x = "Mês", title = "Resultados Anuais", 
        subtitle = glue("Entre {Tabela$Data[1]} e  {Tabela$Data[nrow(x = Tabela)]}")) +
   theme(legend.position = "none", plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5))
 ```
 
+Verificando Quantos Meses Foram Maiores Que X Quantil Em Cada Ano De Simulação E Se Esse Ano Específico Excedeu Ou Não.
+```{r, fig.width = 15, fig.height = 5}
+Excedencia_Escolhida <- 0.05
+Temporario <- Tabela
 
+Temporario$Excedeu <- ifelse(test = Temporario$Valor_Sinistro > as.numeric(x = quantile(x = Simulacao$Valores_Simulados, 1 - Excedencia_Escolhida)),
+                             yes = 1,
+                             no = 0) 
+
+Temporario_Agru <- Temporario%>%group_by(Ano)%>%summarise("Montante" = sum(... = Valor_Sinistro), "Excedencias" = sum(... = Excedeu))
+Temporario_Agru$Excedeu <- ifelse(test = Temporario_Agru$Montante > Premissas$Stop_Loss, 
+                                  yes = "Sim",
+                                  no = "Não")
+
+#Criando Um Data.Frame Para Sumarizar Os Resultados
+Resultado_Meses_Excedentes <- data.frame("Excedencia" = unique(x = Temporario_Agru$Excedencias), "Chance_Exceder" = 0,
+                                         "Chance_Estar" = 0)
+Resultado_Meses_Excedentes <- Resultado_Meses_Excedentes[order(... = Resultado_Meses_Excedentes$Excedencia),]
+
+for(i in 1:nrow(x = Resultado_Meses_Excedentes)){
+  Resultado_Meses_Excedentes$Chance_Exceder[i] <- 
+    round(x = sum(... = subset(x = Temporario_Agru, Excedencias == Resultado_Meses_Excedentes$Excedencia[i])$Excedeu == "Sim")/
+  nrow(x = subset(x = Temporario_Agru, Excedencias == Resultado_Meses_Excedentes$Excedencia[i])) * 100, digits = 4)
+  
+  Resultado_Meses_Excedentes$Chance_Estar[i] <- 
+    round(x = nrow(x = subset(x = Temporario_Agru, Excedencias == Resultado_Meses_Excedentes$Excedencia[i]))/nrow(x = Temporario_Agru) * 100, digits = 4)
+}
+
+ggplot(data = Temporario_Agru, aes(x = Ano,  y = Excedencias)) + geom_point(aes(colour = Excedeu))  + theme_clean(base_size = 16) +
+  labs(title = 
+  glue("Vezes Que Excedeu R$ {round(x = as.numeric(x = quantile(x = Simulacao$Valores_Simulados, 1 - Excedencia_Escolhida)), digits = 2)} Milhões No Ano"), 
+       subtitle = glue("Entre {Tabela$Data[1]} e  {Tabela$Data[nrow(x = Tabela)]}"), y = "Número de Vezes", colour = "Excedeu StopLoss") +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5))
+```
 
 ```{r}
 
 ```
-
